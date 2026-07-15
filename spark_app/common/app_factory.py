@@ -1,6 +1,7 @@
 import argparse
 import importlib
 import inspect
+from datetime import date, datetime
 from pathlib import Path
 
 import yaml
@@ -14,6 +15,22 @@ CONFIG_FILE = "config.yaml"
 SPARK_APP_ROOT = Path(__file__).resolve().parent.parent
 
 RESERVED_KEYS = {"app_name", "env", "ymd", "hms"}
+
+
+def _parse_ymd(value: str) -> str:
+    try:
+        date.fromisoformat(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError("ymd must be YYYY-MM-DD")
+    return value
+
+
+def _parse_hms(value: str) -> str:
+    try:
+        datetime.strptime(value, "%H%M%S")
+    except ValueError:
+        raise argparse.ArgumentTypeError("hms must be HHMMSS")
+    return value
 
 
 class AppFactory:
@@ -41,8 +58,8 @@ class AppFactory:
         parser = argparse.ArgumentParser()
         parser.add_argument("--app_name", required=True)
         parser.add_argument("--env", required=True, choices=["local", "sandbox"])
-        parser.add_argument("--ymd", required=True)
-        parser.add_argument("--hms", required=True)
+        parser.add_argument("--ymd", required=True, type=_parse_ymd)
+        parser.add_argument("--hms", required=True, type=_parse_hms)
 
         known, unknown = parser.parse_known_args(argv)
         if len(unknown) % 2 != 0:
@@ -65,32 +82,23 @@ class AppFactory:
 
         if not app_dir.is_dir():
             raise FileNotFoundError(
-                f"App package not found: {app_dir} "
-                f"(expected {SPARK_APP_PACKAGE}/{'/'.join(app_name.split('.'))}/)"
+                f"App package not found: {app_dir} (expected {SPARK_APP_PACKAGE}/{'/'.join(app_name.split('.'))}/)"
             )
         if not app_py.is_file():
-            raise FileNotFoundError(
-                f"Missing required file: {app_py} "
-                f"(each app must provide {APP_MODULE}.py)"
-            )
+            raise FileNotFoundError(f"Missing required file: {app_py} (each app must provide {APP_MODULE}.py)")
         if not config_yaml.is_file():
-            raise FileNotFoundError(
-                f"Missing required file: {config_yaml} "
-                f"(each app must provide {CONFIG_FILE})"
-            )
+            raise FileNotFoundError(f"Missing required file: {config_yaml} (each app must provide {CONFIG_FILE})")
 
     def _load_app_class(self, app_name: str) -> type[SparkAppBase]:
         module_path = f"{SPARK_APP_PACKAGE}.{app_name}.{APP_MODULE}"
         module = importlib.import_module(module_path)
         classes = [
-            obj for _, obj in inspect.getmembers(module, inspect.isclass)
+            obj
+            for _, obj in inspect.getmembers(module, inspect.isclass)
             if issubclass(obj, SparkAppBase) and obj is not SparkAppBase
         ]
         if len(classes) != 1:
-            raise ImportError(
-                f"{module_path} must define exactly one SparkAppBase subclass, "
-                f"found {len(classes)}"
-            )
+            raise ImportError(f"{module_path} must define exactly one SparkAppBase subclass, found {len(classes)}")
         return classes[0]
 
     def _load_config(self, app_dir: Path) -> dict:

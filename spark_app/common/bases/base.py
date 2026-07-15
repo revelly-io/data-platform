@@ -8,7 +8,6 @@ logger = logging.getLogger(__name__)
 
 
 class SparkAppBase(ABC):
-
     def __init__(
         self,
         app_name: str,
@@ -26,11 +25,7 @@ class SparkAppBase(ABC):
         self._extra_args = extra_args or {}
 
     def _build_spark(self) -> SparkSession:
-        builder = (
-            SparkSession.builder
-            .appName(f"{self._app_name}")
-            .master("local[*]")
-        )
+        builder = SparkSession.builder.appName(f"{self._app_name}").master("local[*]")
 
         return builder.getOrCreate()
 
