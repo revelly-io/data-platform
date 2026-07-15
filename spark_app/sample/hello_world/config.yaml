@@ -3,7 +3,7 @@ spark:
     spark.sql.shuffle.partitions: "1"
 
 datasets:
-  inputs:
+  input:
     orders:
       type: table
       table: raw.orders
@@ -11,7 +11,7 @@ datasets:
       type: table
       path: landing/impression/ymd={ymd}
       format: parquet
-  outputs:
+  output:
     main:
       type: path
       path: mart/hello_world/ymd={ymd}

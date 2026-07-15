@@ -12,6 +12,10 @@ run = ["mise install", "uv sync"]
 description = "Run ruff linter and formatter"
 run = ["uv run ruff check --fix .", "uv run ruff format ."]
 
+[tasks.test]
+description = "Run pytest"
+run = "uv run pytest"
+
 [tasks.spark-app]
 description = "Run a Spark app via entrypoint"
 raw_args = true
@@ -26,4 +30,8 @@ uv run python -m spark_app.entrypoint \
   --ymd $(date +%Y-%m-%d) \
   --hms $(date +%H%M%S)
 """
+
+[tasks.clean-cache]
+description = "Remove __pycache__ and test/lint cache directories"
+run = "rm -rf .pytest_cache .ruff_cache .mypy_cache && find spark_app tests -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true"
 
