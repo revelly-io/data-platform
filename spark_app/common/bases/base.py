@@ -1,11 +1,10 @@
-import json
 import logging
 from abc import ABC, abstractmethod
 
 from pyspark.sql import SparkSession
 
-logger = logging.getLogger(__name__)
-
+from spark_app.common.bases.logging import log_app_startup
+from spark_app.common.datasets import DatasetContext
 
 class SparkAppBase(ABC):
     def __init__(
@@ -24,10 +23,27 @@ class SparkAppBase(ABC):
         self._config = config or {}
         self._extra_args = extra_args or {}
         self._logger = logging.getLogger(type(self).__module__)
+        self._datasets: DatasetContext | None = None
+
+    @property
+    def datasets(self) -> DatasetContext:
+        if self._datasets is None:
+            raise RuntimeError("datasets is not available until execute() builds it")
+        return self._datasets
 
     @property
     def logger(self) -> logging.Logger:
         return self._logger
+
+    def _build_datasets(self, spark: SparkSession) -> DatasetContext:
+        return DatasetContext(
+            app_name=self._app_name,
+            env=self._env,
+            ymd=self._ymd,
+            hms=self._hms,
+            spark=spark,
+            config=self._config,
+        )
 
     def _build_spark(self) -> SparkSession:
         spark_config = self._config.get("spark", {})
@@ -45,16 +61,9 @@ class SparkAppBase(ABC):
         pass
 
     def execute(self) -> None:
-        logger.info(
-            "Spark app context | app_name=%s env=%s ymd=%s hms=%s config=%s extra_args=%s",
-            self._app_name,
-            self._env,
-            self._ymd,
-            self._hms,
-            json.dumps(self._config, ensure_ascii=False),
-            json.dumps(self._extra_args, ensure_ascii=False),
-        )
         spark = self._build_spark()
+        self._datasets = self._build_datasets(spark)
+        log_app_startup(self)
         try:
             self.run(spark)
         finally:
