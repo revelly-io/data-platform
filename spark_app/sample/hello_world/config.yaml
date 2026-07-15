@@ -1,3 +1,19 @@
 spark:
   configs:
     spark.sql.shuffle.partitions: "1"
+
+datasets:
+  inputs:
+    orders:
+      type: table
+      table: raw.orders
+    impression:
+      type: table
+      path: landing/impression/ymd={ymd}
+      format: parquet
+  outputs:
+    main:
+      type: path
+      path: mart/hello_world/ymd={ymd}
+      format: parquet
+      mode: overwrite

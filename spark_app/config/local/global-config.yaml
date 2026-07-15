@@ -1,3 +1,6 @@
+catalog:
+  name: iceberg
+
 datasets:
   warehouse: "s3a://localhost:9000/warehouse"
 

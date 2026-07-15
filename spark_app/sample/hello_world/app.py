@@ -5,11 +5,6 @@ from spark_app.common.bases.base import SparkAppBase
 
 class HelloWorldApp(SparkAppBase):
     def run(self, spark: SparkSession) -> None:
-        partitions = spark.conf.get("spark.sql.shuffle.partitions")
-        warehouse = self._config.get("datasets", {}).get("warehouse")
-        self.logger.info(
-            "Merged config applied | spark.sql.shuffle.partitions=%s datasets.warehouse=%s",
-            partitions,
-            warehouse,
-        )
-        spark.sql("SELECT 'Hello, World!' AS message").show()
+        self.logger.info("Hello, world!")
+        df = spark.createDataFrame([(1, "hello"), (2, "world")], ["id", "msg"])
+        self.logger.info("Spark smoke check | rows=%s", df.count())
