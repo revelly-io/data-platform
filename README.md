@@ -81,7 +81,7 @@ mise run spark-app \
   --env local \
   --ymd 2026-07-14 \
   --hms 100000 \
-  --table users
+  --bucket my-bucket
 ```
 
 ## CLI arguments
@@ -93,6 +93,31 @@ mise run spark-app \
 | `--ymd` | yes | Date (`YYYY-MM-DD`) |
 | `--hms` | yes | Time (`HHMMSS`) |
 | `--key value` | no | Extra args (key-value pairs) |
+
+### Using extra args in `app.py`
+
+CLI flags after the required args are parsed into `self._extra_args` as a `dict[str, str]`:
+
+```bash
+mise run spark-app \
+  --app_name sample.hello_world \
+  --env local \
+  --ymd 2026-07-14 \
+  --hms 100000 \
+  --bucket my-bucket \
+  --mode backfill
+```
+
+```python
+# self._extra_args == {"bucket": "my-bucket", "mode": "backfill"}
+
+class MyApp(SparkAppBase):
+    def run(self, spark: SparkSession) -> None:
+        bucket = self._extra_args["bucket"]                  # required for this run
+        mode = self._extra_args.get("mode", "incremental")   # optional, with default
+```
+
+`self._config` (from `config.yaml`) holds static per-app settings. `self._extra_args` holds per-run overrides passed via CLI.
 
 ## App structure
 
