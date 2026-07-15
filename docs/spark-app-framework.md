@@ -44,7 +44,6 @@ sequenceDiagram
     participant ConfigLoader
     participant SparkAppBase
     participant DatasetContext
-    participant App as app.run()
 
     CLI->>Entrypoint: python -m spark_app.entrypoint
     Entrypoint->>AppFactory: build()
@@ -54,9 +53,8 @@ sequenceDiagram
     AppFactory-->>Entrypoint: app instance
     Entrypoint->>SparkAppBase: execute()
     SparkAppBase->>SparkAppBase: _build_spark()
-    SparkAppBase->>DatasetContext: resolve datasets from config
-    SparkAppBase->>SparkAppBase: log_app_startup()
-    SparkAppBase->>App: run(spark)
+    SparkAppBase->>DatasetContext: pair() → input, output
+    SparkAppBase->>SparkAppBase: run(spark)
     SparkAppBase->>SparkAppBase: spark.stop()
 ```
 
@@ -73,10 +71,12 @@ sequenceDiagram
 | **AppFactory** | `common/app_factory.py` | **Factory** — parse CLI, validate app layout, dynamically load app class, call `ConfigLoader.load()` |
 | **ConfigLoader** | `common/config/loader.py` | Load global + app YAML and `deep_merge` (app wins at leaf keys) |
 | **SparkAppBase** | `common/bases/base.py` | **Template Method** — fixed lifecycle: spark → datasets → log → `run()` → stop |
-| **DatasetContext** | `common/datasets/context.py` | Env-aware access to resolved datasets via `input` / `output` |
-| **Dataset** | `common/datasets/models.py` | **Strategy** — type-specific resolve (`from_spec`) and read/write |
+| **DatasetContext** | `common/datasets/context.py` | One instance per yaml group (`input` or `output`): holds resolved `Dataset` objects, exposes `read`/`write`, supports `("env")` for cross-env |
+| **Dataset** | `common/datasets/models.py` | **Strategy** — yaml spec → location via `from_spec()`; actual IO in `read()` / `write()` |
 
-Supporting modules: `config/merge.py`, `bases/logging.py` (startup logs separated from base logic), `datasets/registry.py` (**Registry** — explicit `type → class` map).
+`DatasetContext.pair()` builds `self.input` and `self.output` on `SparkAppBase`. Both share an internal `_DatasetBinding` (spark, run args, merged config, per-env resolve cache) so config is not loaded or parsed twice.
+
+Supporting modules: `config/merge.py`, `bases/logging.py`, `datasets/registry.py` (**Registry** — explicit `type → class` map).
 
 ## Config
 
@@ -125,24 +125,38 @@ Templates `{ymd}`, `{hms}`, `{env}` are substituted at resolve time from CLI arg
 
 ### App API
 
-```python
-orders = self.datasets.input.read("orders")
-self.datasets.output.write("main", df)
-
-# Cross-env (reloads config for that env)
-self.datasets("sandbox").input.read("orders")
-```
-
-Inspect resolved metadata without reading data:
+In `run()`, use `self.input` and `self.output` — each is a `DatasetContext` for that yaml group:
 
 ```python
-self.datasets.input["orders"].location
+orders = self.input.read("orders")
+self.output.write("main", orders)
+
+# Cross-env (reloads config for that env on first use)
+self.input("sandbox").read("orders")
+self.output("sandbox").write("main", orders)
 ```
+
+- **`read` / `write`** on the context look up a named `Dataset` and delegate IO to it.
+- **`self.input["orders"]`** returns the resolved `Dataset` (e.g. for `.location`).
+
+### How DatasetContext is built
+
+```
+DatasetContext.pair(app_name, env, ymd, hms, spark, config)
+  → _DatasetBinding (shared: spark, config, cache)
+  → self.input  = DatasetContext(binding, kind="input")
+  → self.output = DatasetContext(binding, kind="output")
+```
+
+Resolve flow inside binding:
+
+```
+yaml spec → registry (type → class) → Dataset.from_spec() → dict[name, Dataset]
+```
+
+`ResolveContext` supplies `warehouse`, `catalog`, and `{ymd}` / `{hms}` / `{env}` templates from merged config + CLI args.
 
 ### Type registry
-
-1. Create `common/datasets/types/<type>.py` — subclass `Dataset`, implement `from_spec()`, override `read`/`write` when IO differs.
-2. Register in `common/datasets/registry.py`.
 
 | `type` | Class | Notes |
 |--------|-------|-------|
@@ -151,13 +165,10 @@ self.datasets.input["orders"].location
 
 One `PathDataset` handles all URI schemes (local, s3, hdfs) — no split by filesystem.
 
-### Resolve pipeline
+### Adding a dataset type
 
-```
-yaml spec → registry (type → class) → from_spec() → Dataset → read()/write()
-```
-
-`ResolveContext` reads `warehouse`, `catalog`, and template variables from merged config + run args.
+1. Create `common/datasets/types/<type>.py` — subclass `Dataset`, implement `from_spec()`, override `read`/`write` when IO differs.
+2. Register in `common/datasets/registry.py`.
 
 ## SparkAppBase
 
@@ -165,7 +176,8 @@ Apps subclass `SparkAppBase` and implement only `run(self, spark)`.
 
 | Member | Description |
 |--------|-------------|
-| `self.datasets` | `DatasetContext` (available after `execute()` builds it) |
+| `self.input` | Input `DatasetContext` — `read()`, `["name"]`, `("env")` |
+| `self.output` | Output `DatasetContext` — `write()`, `["name"]`, `("env")` |
 | `self.logger` | Logger for the app module |
 | `self._config` | Merged config dict |
 | `self._extra_args` | CLI key-value pairs after required args |
