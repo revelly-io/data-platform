@@ -1,0 +1,29 @@
+[tools]
+python = "3.12"
+
+[settings]
+python.uv_venv_auto = "create|source"
+
+[tasks.setup]
+description = "Install Python and dependencies"
+run = ["mise install", "uv sync"]
+
+[tasks.lint]
+description = "Run ruff linter and formatter"
+run = ["uv run ruff check --fix .", "uv run ruff format ."]
+
+[tasks.spark-app]
+description = "Run a Spark app via entrypoint"
+raw_args = true
+run = "uv run python -m spark_app.entrypoint"
+
+[tasks.sample]
+description = "Run sample.hello_world app locally"
+run = """
+uv run python -m spark_app.entrypoint \
+  --app_name sample.hello_world \
+  --env local \
+  --ymd $(date +%Y-%m-%d) \
+  --hms $(date +%H%M%S)
+"""
+
