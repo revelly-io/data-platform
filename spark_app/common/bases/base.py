@@ -23,9 +23,20 @@ class SparkAppBase(ABC):
         self._hms = hms
         self._config = config or {}
         self._extra_args = extra_args or {}
+        self._logger = logging.getLogger(type(self).__module__)
+
+    @property
+    def logger(self) -> logging.Logger:
+        return self._logger
 
     def _build_spark(self) -> SparkSession:
-        builder = SparkSession.builder.appName(f"{self._app_name}").master("local[*]")
+        spark_config = self._config.get("spark", {})
+        master = spark_config.get("master", "local[*]")
+        configs = spark_config.get("configs") or {}
+
+        builder = SparkSession.builder.appName(self._app_name).master(master)
+        for key, value in configs.items():
+            builder = builder.config(key, str(value))
 
         return builder.getOrCreate()
 

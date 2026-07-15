@@ -4,15 +4,16 @@ import inspect
 from datetime import date, datetime
 from pathlib import Path
 
-import yaml
-
 from spark_app.common.bases.base import SparkAppBase
+from spark_app.common.config.merge import deep_merge, load_yaml
 
 # Root package name for imports. Change this if the top-level package is renamed.
 SPARK_APP_PACKAGE = "spark_app"
 APP_MODULE = "app"
 CONFIG_FILE = "config.yaml"
+GLOBAL_CONFIG_FILE = "global-config.yaml"
 SPARK_APP_ROOT = Path(__file__).resolve().parent.parent
+GLOBAL_CONFIG_ROOT = SPARK_APP_ROOT / "config"
 
 RESERVED_KEYS = {"app_name", "env", "ymd", "hms"}
 
@@ -44,7 +45,7 @@ class AppFactory:
         self._validate_app_layout(app_dir, self._known.app_name)
 
         app_cls = self._load_app_class(self._known.app_name)
-        config = self._load_config(app_dir)
+        config = self._load_config(app_dir, self._known.env)
         return app_cls(
             app_name=self._known.app_name,
             env=self._known.env,
@@ -101,6 +102,13 @@ class AppFactory:
             raise ImportError(f"{module_path} must define exactly one SparkAppBase subclass, found {len(classes)}")
         return classes[0]
 
-    def _load_config(self, app_dir: Path) -> dict:
-        with open(app_dir / CONFIG_FILE) as f:
-            return yaml.safe_load(f) or {}
+    def _load_config(self, app_dir: Path, env: str) -> dict:
+        global_config_path = GLOBAL_CONFIG_ROOT / env / GLOBAL_CONFIG_FILE
+        if not global_config_path.is_file():
+            raise FileNotFoundError(
+                f"Missing required file: {global_config_path} (each env must provide {GLOBAL_CONFIG_FILE})"
+            )
+
+        global_config = load_yaml(global_config_path)
+        app_config = load_yaml(app_dir / CONFIG_FILE)
+        return deep_merge(global_config, app_config)
