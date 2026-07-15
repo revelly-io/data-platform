@@ -34,7 +34,7 @@ class AppFactory:
             ymd=self._known.ymd,
             hms=self._known.hms,
             config=config,
-            args=self._extra_args,
+            extra_args=self._extra_args,
         )
 
     def _parse_args(self, argv: list[str] | None):

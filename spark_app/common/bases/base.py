@@ -16,14 +16,14 @@ class SparkAppBase(ABC):
         ymd: str,
         hms: str,
         config: dict | None = None,
-        args: dict | None = None,
+        extra_args: dict | None = None,
     ) -> None:
         self._app_name = app_name
         self._env = env
         self._ymd = ymd
         self._hms = hms
         self._config = config or {}
-        self._args = args or {}
+        self._extra_args = extra_args or {}
 
     def _build_spark(self) -> SparkSession:
         builder = (
@@ -40,13 +40,13 @@ class SparkAppBase(ABC):
 
     def execute(self) -> None:
         logger.info(
-            "Spark app context | app_name=%s env=%s ymd=%s hms=%s config=%s args=%s",
+            "Spark app context | app_name=%s env=%s ymd=%s hms=%s config=%s extra_args=%s",
             self._app_name,
             self._env,
             self._ymd,
             self._hms,
             json.dumps(self._config, ensure_ascii=False),
-            json.dumps(self._args, ensure_ascii=False),
+            json.dumps(self._extra_args, ensure_ascii=False),
         )
         spark = self._build_spark()
         try:
