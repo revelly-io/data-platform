@@ -14,4 +14,4 @@ def test_execute_runs_lifecycle(test_app):
     log_startup.assert_called_once_with(test_app)
     run.assert_called_once_with(mock_spark)
     mock_spark.stop.assert_called_once()
-    assert test_app.datasets.input["orders"].location == "iceberg.raw.orders"
+    assert test_app.input["orders"].location == "iceberg.raw.orders"

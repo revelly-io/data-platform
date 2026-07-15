@@ -1,5 +1,6 @@
 from collections.abc import Callable
 from copy import deepcopy
+from dataclasses import dataclass
 from unittest.mock import MagicMock
 
 import pytest
@@ -10,11 +11,18 @@ from spark_app.common.bases.base import SparkAppBase
 from spark_app.common.config.loader import ConfigLoader
 from spark_app.common.config.merge import deep_merge
 from spark_app.common.datasets import DatasetContext
+from spark_app.common.datasets.context import DatasetKind
 
 TEST_APP_NAME = "sample.test_app"
 TEST_ENV = "local"
 TEST_YMD = "2026-07-01"
 TEST_HMS = "121212"
+
+
+@dataclass
+class DatasetContextPair:
+    input: DatasetContext
+    output: DatasetContext
 
 
 @pytest.fixture
@@ -138,15 +146,19 @@ def config_loader_root(tmp_path, global_config: dict, app_config: dict, monkeypa
 
 
 @pytest.fixture
-def make_dataset_context(spark: MagicMock) -> Callable[..., DatasetContext]:
+def make_dataset_context(spark: MagicMock) -> Callable[..., DatasetContext | DatasetContextPair]:
     def _make(
         config: dict,
         *,
+        kind: DatasetKind | None = None,
         env: str = TEST_ENV,
         ymd: str = TEST_YMD,
         hms: str = TEST_HMS,
-    ) -> DatasetContext:
-        return DatasetContext.from_merged_config(config, env=env, ymd=ymd, hms=hms, spark=spark)
+    ) -> DatasetContext | DatasetContextPair:
+        if kind is None:
+            input_ctx, output_ctx = DatasetContext.pair("", env, ymd, hms, spark, config)
+            return DatasetContextPair(input=input_ctx, output=output_ctx)
+        return DatasetContext.from_merged_config(config, kind, env, ymd, hms, spark)
 
     return _make
 

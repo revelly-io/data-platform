@@ -25,7 +25,7 @@ def test_invalid_dataset_spec_raises(merged_config, make_dataset_context, copy_c
     config["datasets"]["input"]["bad"] = {"topic": "events"}
 
     with pytest.raises(ValueError, match="requires 'type'"):
-        make_dataset_context(config)
+        make_dataset_context(config, kind="input")
 
 
 def test_path_requires_warehouse(make_dataset_context):
@@ -36,4 +36,4 @@ def test_path_requires_warehouse(make_dataset_context):
     }
 
     with pytest.raises(ValueError, match="datasets.warehouse is required"):
-        make_dataset_context(config)
+        make_dataset_context(config, kind="output")
