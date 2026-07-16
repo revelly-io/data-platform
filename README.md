@@ -59,6 +59,17 @@ Entering the project directory auto-activates `.venv` (`python.uv_venv_auto`).
 mise run jupyter   # opens notebooks/
 ```
 
+Get a `SparkSession` using the same global-config as the app framework:
+
+```python
+from spark_app.common.config.loader import ConfigLoader
+from spark_app.common.spark_session import build_spark_session
+
+spark = build_spark_session("notebooks", ConfigLoader.load_global("local"))
+```
+
+See `notebooks/sample.ipynb` for a full example.
+
 ## Local stack
 
 Sample parquet lives in `fixtures/` (committed). Docker Compose starts **MinIO**, **Postgres**, and **Iceberg REST Catalog**, and seeds the `local` bucket on first boot.
@@ -131,9 +142,12 @@ mise run spark-app \
 | -------- | -------- | ----------- |
 | `--app_name` | yes | App package path (e.g. `sample.orders_summary`) |
 | `--env` | yes | `local`, `homelab`, or `aws` |
-| `--ymd` | yes | Date (`YYYY-MM-DD`) |
-| `--hms` | yes | Time (`HHMMSS`) |
-| `--key value` | no | Extra args passed to `self._extra_args` |
+| `--ymd` | only for `SparkBatchAppBase` apps | Date (`YYYY-MM-DD`) |
+| `--hms` | only for `SparkBatchAppBase` apps | Time (`HHMMSS`) |
+| `--key value` | no | Extra args passed to `self.extra_args` |
+
+`--ymd`/`--hms` are required when `--app_name` resolves to a `SparkBatchAppBase` app (e.g. the
+sample apps) and rejected otherwise (e.g. `SparkOpsAppBase` apps like `catalog.ddl`).
 
 Config merge, app layout, `self.input` / `self.output`, and startup logs: [docs/spark-app-framework.md](docs/spark-app-framework.md).
 
