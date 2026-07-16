@@ -2,50 +2,19 @@
 
 from __future__ import annotations
 
-import argparse
 import logging
-import sys
 from pathlib import Path
 from string import Template
 
-from dotenv import load_dotenv
 from pyspark.sql import SparkSession
 
-from spark_app.common.config.loader import ConfigLoader, _expand_env
-from spark_app.common.config.merge import load_yaml
+from spark_app.common.bases.ops import SparkOpsAppBase
+from spark_app.common.config.loader import ConfigLoader
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
-)
 logger = logging.getLogger(__name__)
 
 DDL_ROOT = ConfigLoader.REPO_ROOT / "catalog" / "ddl"
 LAYERS = ("raw", "refined", "mart")
-
-
-def _load_global_config(env: str) -> dict:
-    env_file = ConfigLoader.REPO_ROOT / f".env.{env}"
-    if not env_file.is_file():
-        raise FileNotFoundError(f"Missing {env_file} (copy .env.{env}.example → .env.{env})")
-    load_dotenv(env_file)
-
-    global_config_path = ConfigLoader.GLOBAL_CONFIG_ROOT / env / ConfigLoader.GLOBAL_CONFIG_FILE
-    if not global_config_path.is_file():
-        raise FileNotFoundError(f"Missing required file: {global_config_path}")
-
-    return _expand_env(load_yaml(global_config_path))
-
-
-def _build_spark(config: dict) -> SparkSession:
-    spark_config = config.get("spark", {})
-    master = spark_config.get("master", "local[*]")
-    configs = spark_config.get("configs") or {}
-
-    builder = SparkSession.builder.appName("catalog.apply").master(master)
-    for key, value in configs.items():
-        builder = builder.config(key, str(value))
-    return builder.getOrCreate()
 
 
 def _resolve_sql_files(layer: str | None, domain: str | None, table: str | None) -> list[Path]:
@@ -117,42 +86,33 @@ def _split_statements(sql: str) -> list[str]:
     return [part for part in parts if part]
 
 
-def _parse_args(argv: list[str] | None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Apply or drop Iceberg DDL under catalog/ddl/")
-    parser.add_argument("--env", required=True)
-    parser.add_argument("--layer", choices=LAYERS)
-    parser.add_argument("--domain")
-    parser.add_argument("--table")
-    parser.add_argument("--drop", action="store_true", help="Drop table(s) instead of applying DDL")
-    return parser.parse_args(argv)
+def _is_truthy(value: str | None) -> bool:
+    return str(value).strip().lower() in {"1", "true", "yes"}
 
 
-def main(argv: list[str] | None = None) -> None:
-    args = _parse_args(argv)
-    config = _load_global_config(args.env)
-    catalog = (config.get("catalog") or {}).get("name", "iceberg")
+class CatalogDdlApp(SparkOpsAppBase):
+    """Run Iceberg table DDL under catalog/ddl/: apply (CREATE) or drop (--drop true).
 
-    spark = _build_spark(config)
-    try:
-        if args.drop:
-            if not (args.layer and args.domain and args.table):
+    --layer/--domain/--table/--drop are passed through AppFactory's extra_args
+    (e.g. `--app_name catalog.ddl --env local --layer refined --domain sample --table orders`).
+    """
+
+    def run(self, spark: SparkSession) -> None:
+        catalog = (self.config.get("catalog") or {}).get("name", "iceberg")
+        layer = self.extra_args.get("layer")
+        domain = self.extra_args.get("domain")
+        table = self.extra_args.get("table")
+        drop = _is_truthy(self.extra_args.get("drop"))
+
+        if drop:
+            if not (layer and domain and table):
                 raise ValueError("--drop requires --layer, --domain, and --table")
-            _drop_table(spark, catalog, args.layer, args.domain, args.table)
+            _drop_table(spark, catalog, layer, domain, table)
             return
 
-        sql_files = _resolve_sql_files(args.layer, args.domain, args.table)
+        sql_files = _resolve_sql_files(layer, domain, table)
         if not sql_files:
             raise FileNotFoundError(f"No DDL files found under {DDL_ROOT}")
 
         for path in sql_files:
-            _apply_file(spark, path, config, catalog)
-    finally:
-        spark.stop()
-
-
-if __name__ == "__main__":
-    try:
-        main()
-    except Exception as exc:
-        logger.error("%s", exc)
-        sys.exit(1)
+            _apply_file(spark, path, self.config, catalog)

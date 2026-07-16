@@ -24,12 +24,12 @@ run = "uv run python -m spark_app.entrypoint"
 [tasks."catalog:apply"]
 description = "Apply Iceberg DDL from catalog/ddl/"
 raw_args = true
-run = "uv run python -m spark_app.catalog.apply"
+run = "uv run python -m spark_app.entrypoint --app_name catalog.ddl"
 
 [tasks."catalog:drop"]
 description = "Drop Iceberg table (catalog/ddl target)"
 raw_args = true
-run = "uv run python -m spark_app.catalog.apply --drop"
+run = "uv run python -m spark_app.entrypoint --app_name catalog.ddl --drop true"
 
 [tasks."sample:ingest"]
 description = "Run sample.orders_ingest (requires infra:up + catalog:apply)"
