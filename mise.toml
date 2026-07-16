@@ -5,7 +5,7 @@ python = "3.12"
 python.uv_venv_auto = "create|source"
 
 [tasks.setup]
-description = "Install Python and dependencies"
+description = "Install Python 3.12, sync .venv (pyspark, duckdb, jupyterlab, …)"
 run = ["mise install", "uv sync"]
 
 [tasks.lint]
@@ -34,4 +34,8 @@ uv run python -m spark_app.entrypoint \
 [tasks.clean-cache]
 description = "Remove __pycache__ and test/lint cache directories"
 run = "rm -rf .pytest_cache .ruff_cache .mypy_cache && find spark_app tests -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true"
+
+[tasks.jupyter]
+description = "Start JupyterLab (notebooks/)"
+run = "uv run jupyter lab --notebook-dir=notebooks"
 

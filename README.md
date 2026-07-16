@@ -2,70 +2,81 @@
 
 A data platform repository for running Spark apps.
 
-For framework design (components, datasets, config merge), see [docs/spark-app-framework.md](docs/spark-app-framework.md).
+Framework design (config merge, datasets, components): [docs/spark-app-framework.md](docs/spark-app-framework.md).
 
-## Prerequisites (macOS)
+## Prerequisites
 
-- [mise](https://mise.jdx.dev/) — Python version management and task runner
-- [uv](https://docs.astral.sh/uv/) — Python package and venv management
-- Java — required for PySpark (`brew install openjdk`)
+Install these on the host before `mise run setup`. System Python is not required.
 
-## 1. Install mise and configure your shell
+| Tool | Purpose | Install (macOS) |
+| ---- | ------- | --------------- |
+| [mise](https://mise.jdx.dev/) | Python version + task runner | `brew install mise` |
+| [uv](https://docs.astral.sh/uv/) | venv + package sync | `brew install uv` |
+| OpenJDK | PySpark (JVM) — not needed for Jupyter/DuckDB only | `brew install openjdk` |
 
-```bash
-brew install mise
-```
-
-Add the following to `~/.zshrc`:
+Configure mise in `~/.zshrc`:
 
 ```bash
 eval "$(mise activate zsh)"
 ```
 
-Apply the change:
+Then `source ~/.zshrc`.
 
-```bash
-source ~/.zshrc
-```
+## Host setup
 
-## 2. Install uv
-
-```bash
-brew install uv
-```
-
-Or:
-
-```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh
-```
-
-## 3. Set up the project
+One-time project setup:
 
 ```bash
 cd data-platform
-mise trust          # one-time: trust mise.toml
-mise run setup      # install Python 3.12 + uv sync
+mise trust          # trust mise.toml
+mise run setup      # Python 3.12 + .venv + packages
 ```
 
-`setup` runs:
+`mise run setup` runs:
 
-- `mise install` — installs Python defined in `mise.toml`
-- `uv sync` — creates `.venv` and installs dependencies (including dev tools)
+1. `mise install` — Python 3.12 (from `mise.toml`)
+2. `uv sync` — create `.venv` and install packages from `pyproject.toml`
 
-When you enter the project directory, mise auto-activates `.venv` (`python.uv_venv_auto`).
+Packages installed into `.venv` include:
 
-## 4. Run a Spark app
+| Group | Packages |
+| ----- | -------- |
+| runtime | `pyspark`, `pyyaml` |
+| dev | `pytest`, `ruff`, `duckdb`, `jupyterlab` |
 
-### Sample app (hello_world)
+`mise run setup` does **not** install or start: OpenJDK, Docker, or Jupyter. Use `mise run jupyter` when you want a notebook server.
+
+Entering the project directory auto-activates `.venv` (`python.uv_venv_auto`).
+
+### Jupyter (after setup)
+
+```bash
+mise run jupyter   # opens notebooks/ — use `import duckdb` in a notebook
+```
+
+## Docker Compose
+
+Local Iceberg infra (MinIO + Postgres + REST catalog) for `--env local` integration tests — **coming soon**.
+
+```bash
+# docker compose up -d
+```
+
+Until then, `mise run sample` runs Spark in `local[*]` mode without remote storage.
+
+## Run apps
+
+Requires OpenJDK. Use `--env local` on the Mac; `--env sandbox` targets homelab (prod-like K8s Spark).
+
+### Sample app
 
 ```bash
 mise run sample
 ```
 
-Runs `sample.hello_world` locally. `--ymd` and `--hms` are set to the current date and time.
+Runs `sample.hello_world` with today's `--ymd` and `--hms`.
 
-### Run manually
+### Any app
 
 ```bash
 mise run spark-app \
@@ -75,7 +86,7 @@ mise run spark-app \
   --hms 100000
 ```
 
-You can also pass extra args:
+Extra CLI flags (key-value pairs after required args):
 
 ```bash
 mise run spark-app \
@@ -86,103 +97,26 @@ mise run spark-app \
   --bucket my-bucket
 ```
 
-## CLI arguments
+### CLI arguments
 
 | Argument | Required | Description |
 | -------- | -------- | ----------- |
 | `--app_name` | yes | App package path (e.g. `sample.hello_world`) |
-| `--env` | yes | `local` or `sandbox` |
+| `--env` | yes | `local` (Mac) or `sandbox` (homelab) |
 | `--ymd` | yes | Date (`YYYY-MM-DD`) |
 | `--hms` | yes | Time (`HHMMSS`) |
-| `--key value` | no | Extra args (key-value pairs) |
+| `--key value` | no | Extra args passed to `self._extra_args` |
 
-### Using extra args in `app.py`
-
-CLI flags after the required args are parsed into `self._extra_args` as a `dict[str, str]`:
-
-```python
-class MyApp(SparkAppBase):
-    def run(self, spark: SparkSession) -> None:
-        bucket = self._extra_args["bucket"]
-        mode = self._extra_args.get("mode", "incremental")
-```
-
-`self._config` is the merged global + app config. `self._extra_args` holds per-run CLI overrides.
-
-## Config
-
-Config is merged in two layers by `--env`:
-
-```
-spark_app/config/{local|sandbox}/global-config.yaml
-  + spark_app/{app_name}/config.yaml
-  → deep merge (app overrides global)
-```
-
-| Section | Typical location | Purpose |
-| ------- | ---------------- | ------- |
-| `catalog` | global | Catalog name (used when resolving table datasets) |
-| `datasets.warehouse` | global | Base path for file-based datasets |
-| `datasets.input` / `datasets.output` | app | Named input/output dataset specs |
-| `spark` | global + app | `master`, `configs` for SparkSession |
-
-Example app `config.yaml`:
-
-```yaml
-spark:
-  configs:
-    spark.sql.shuffle.partitions: "1"
-
-datasets:
-  input:
-    orders:
-      type: table
-      table: raw.orders
-  output:
-    main:
-      type: path
-      path: mart/hello_world/ymd={ymd}
-      format: parquet
-      mode: overwrite
-```
-
-At startup, merged config and resolved dataset locations are logged (see [docs/spark-app-framework.md](docs/spark-app-framework.md#startup-log-merged--resolved)).
-
-## App layout
-
-Each Spark app is a package under `spark_app/`:
-
-```
-spark_app/
-└── sample/hello_world/
-    ├── app.py        # exactly one SparkAppBase subclass
-    └── config.yaml
-```
-
-Package depth is not limited (`mart.orders.daily_summary` → nested directories). Intermediate dirs need `__init__.py`.
-
-## Datasets in app code
-
-Subclass `SparkAppBase` and implement `run()`. Use `self.input` / `self.output`:
-
-```python
-class HelloWorldApp(SparkAppBase):
-    def run(self, spark: SparkSession) -> None:
-        orders = self.input.read("orders")
-        self.output.write("main", orders)
-
-        # optional: read from another env
-        sandbox_orders = self.input("sandbox").read("orders")
-```
-
-Each of `self.input` and `self.output` is a `DatasetContext` built from `datasets.input` / `datasets.output` in config. IO is implemented on `Dataset`; the context resolves yaml specs to `Dataset` objects at execute time.
+Config merge, app layout, `self.input` / `self.output`, and startup logs: [docs/spark-app-framework.md](docs/spark-app-framework.md).
 
 ## mise tasks
 
 | Task | Description |
 | ---- | ----------- |
-| `mise run setup` | Install Python and dependencies |
-| `mise run lint` | Run ruff check --fix and format |
+| `mise run setup` | Install Python 3.12, sync `.venv` (pyspark, duckdb, jupyterlab, …) |
+| `mise run jupyter` | Start JupyterLab (`notebooks/`) |
+| `mise run lint` | Ruff check --fix and format |
 | `mise run test` | Run pytest |
-| `mise run sample` | Run `sample.hello_world` locally |
+| `mise run sample` | Run `sample.hello_world` (`--env local`) |
 | `mise run spark-app -- ...` | Run any Spark app |
+| `mise run clean-cache` | Remove pytest/ruff/`__pycache__` caches |
