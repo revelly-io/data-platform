@@ -37,7 +37,7 @@ class TableDataset(Dataset):
         if table:
             table_name = str(table)
             catalog = context.catalog
-            if catalog and table_name.count(".") < 2:
+            if catalog and not table_name.startswith(f"{catalog}."):
                 location = f"{catalog}.{table_name}"
             else:
                 location = table_name
@@ -65,7 +65,13 @@ class TableDataset(Dataset):
             return
 
         writer = df.writeTo(self.location)
-        if self.metadata.get("mode", self.default_mode) == "append":
+        mode = self.metadata.get("mode", self.default_mode)
+        if mode == "append":
             writer.append()
+        elif mode == "overwrite_partitions":
+            writer.overwritePartitions()
         else:
-            writer.createOrReplace()
+            raise ValueError(
+                f"dataset '{self.name}' unsupported table write mode {mode!r} "
+                "(supported: append, overwrite_partitions)"
+            )

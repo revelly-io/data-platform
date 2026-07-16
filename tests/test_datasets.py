@@ -14,6 +14,21 @@ def test_read_delegates_to_dataset(merged_config, make_dataset_context, spark):
     spark.table.assert_called_once_with("iceberg.raw.orders")
 
 
+def test_resolves_nested_catalog_table(make_dataset_context):
+    config = {
+        "catalog": {"name": "iceberg"},
+        "datasets": {
+            "warehouse": "s3a://local",
+            "input": {
+                "orders": {"type": "table", "table": "refined.sample.orders"},
+            },
+        },
+    }
+    ctx = make_dataset_context(config, kind="input")
+
+    assert ctx["orders"].location == "iceberg.refined.sample.orders"
+
+
 def test_resolves_path_and_table_datasets(merged_config, make_dataset_context, test_ymd):
     ctx = make_dataset_context(merged_config)
 
