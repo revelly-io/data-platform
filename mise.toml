@@ -5,7 +5,7 @@ python = "3.12"
 python.uv_venv_auto = "create|source"
 
 [tasks.setup]
-description = "Install Python 3.12, sync .venv (pyspark, duckdb, jupyterlab, …)"
+description = "Install Python 3.12, sync .venv (pyspark, jupyterlab, …)"
 run = ["mise install", "uv sync"]
 
 [tasks.lint]
@@ -21,11 +21,19 @@ description = "Run a Spark app via entrypoint"
 raw_args = true
 run = "uv run python -m spark_app.entrypoint"
 
+[tasks."infra:up"]
+description = "Start local MinIO stack (docker compose)"
+run = "docker compose -f docker/compose.yml --env-file .env.local up -d"
+
+[tasks."infra:down"]
+description = "Stop local MinIO stack"
+run = "docker compose -f docker/compose.yml --env-file .env.local down"
+
 [tasks.sample]
-description = "Run sample.hello_world app locally"
+description = "Run sample.orders_summary (requires infra:up)"
 run = """
 uv run python -m spark_app.entrypoint \
-  --app_name sample.hello_world \
+  --app_name sample.orders_summary \
   --env local \
   --ymd $(date +%Y-%m-%d) \
   --hms $(date +%H%M%S)
@@ -38,4 +46,3 @@ run = "rm -rf .pytest_cache .ruff_cache .mypy_cache && find spark_app tests -typ
 [tasks.jupyter]
 description = "Start JupyterLab (notebooks/)"
 run = "uv run jupyter lab --notebook-dir=notebooks"
-

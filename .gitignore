@@ -6,5 +6,12 @@ __pycache__/
 # Jupyter
 .ipynb_checkpoints/
 
+# Local data lake volume (MinIO persist)
+data/
+
+# Env secrets (see .env.<env>.example)
+.env.*
+!.env.*.example
+
 # Workspace
 work/
