@@ -167,20 +167,17 @@ Paths are **the same across envs**; isolation is by bucket (`--env`) and credent
 
 ```
 s3a://{env}/
-  raw/{database}/{table}/[partition=...]/
-  refined/{database}/{table}/[partition=...]/
-  mart/{database}/{table}/[partition=...]/
+  raw/{domain}/{table}/...
+  refined/{domain}/{table}/...
+  mart/{domain}/{table}/...
 ```
 
-- **raw** — source-aligned ingest (files or external table locations).
-- **refined** — cleaned, conformed datasets.
-- **mart** — app- or domain-facing aggregates.
+Catalog (Iceberg REST): **`iceberg.{layer}.{domain}.{table}`** — e.g. `iceberg.refined.sample.orders`.  
+yaml: `table: refined.sample.orders`.
 
-Use `{ymd}`, `{hms}`, `{env}` templates in yaml paths for partitions (e.g. `raw/events/orders/ymd={ymd}/`).
+DDL: `catalog/ddl/{layer}/{domain}/{table}.sql` — apply with `mise run catalog:apply --env local --layer refined --domain sample --table orders`.
 
-Catalog tables are **external**: metadata in the catalog (Iceberg/Hive), data files under the paths above. Dropping a table removes metadata only; object storage data remains unless explicitly deleted.
-
-`type: table` specs use catalog namespaces aligned with the layer (`raw.orders`, `mart.orders_summary`). `type: path` specs set the relative path under `warehouse` directly.
+Table write modes: `append`, `overwrite_partitions` only (DDL-first; no `createOrReplace` on catalog tables).
 
 ### Adding a dataset type
 

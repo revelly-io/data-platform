@@ -59,9 +59,9 @@ Entering the project directory auto-activates `.venv` (`python.uv_venv_auto`).
 mise run jupyter   # opens notebooks/
 ```
 
-## Local MinIO stack
+## Local stack
 
-Sample parquet files live in `fixtures/` (committed). Docker Compose starts MinIO and seeds the `local` bucket (`s3a://local/raw/...`) on first boot.
+Sample parquet lives in `fixtures/` (committed). Docker Compose starts **MinIO**, **Postgres**, and **Iceberg REST Catalog**, and seeds the `local` bucket on first boot.
 
 Requires `.env.local` from [Host setup](#host-setup).
 
@@ -69,21 +69,40 @@ Requires `.env.local` from [Host setup](#host-setup).
 mise run infra:up
 ```
 
-MinIO console: http://localhost:9001 (credentials in `.env.local`).
+| Service | URL |
+| ------- | --- |
+| MinIO API | http://localhost:9000 |
+| MinIO console | http://localhost:9001 |
+| Iceberg REST | http://localhost:8181 |
+
+Apply Iceberg DDL (once per fresh stack, or after DDL changes):
+
+```bash
+mise run catalog:apply --env local --layer refined --domain sample --table orders
+```
 
 ## Run apps
 
 Requires OpenJDK. Use `--env local` on the Mac; `--env homelab` or `--env aws` for remote targets (see `spark_app/config/{env}/`).
 
-Start MinIO before running the sample app (`mise run infra:up`).
+Start the local stack before running apps (`mise run infra:up`).
 
-### Sample app
+### Sample apps
+
+**Ingest** — raw parquet → refined Iceberg table:
+
+```bash
+mise run catalog:apply --env local --layer refined --domain sample --table orders
+mise run sample:ingest
+```
+
+**Summary** — read parquet from MinIO, aggregate, print:
 
 ```bash
 mise run sample
 ```
 
-Reads `fixtures/orders.parquet` from MinIO (`s3a://local/raw/fixtures/orders/...`), aggregates by order status, and prints the result.
+Reads `s3a://local/raw/sample/orders/orders.parquet`. Ingest writes to `iceberg.refined.sample.orders`.
 
 ### Any app
 
@@ -123,11 +142,11 @@ Config merge, app layout, `self.input` / `self.output`, and startup logs: [docs/
 | Task | Description |
 | ---- | ----------- |
 | `mise run setup` | Install Python 3.12, sync `.venv` |
-| `mise run infra:up` | Start MinIO + copy fixtures into bucket |
-| `mise run infra:down` | Stop MinIO stack |
-| `mise run jupyter` | Start JupyterLab (`notebooks/`) |
-| `mise run lint` | Ruff check --fix and format |
-| `mise run test` | Run pytest |
-| `mise run sample` | Run `sample.orders_summary` (`--env local`, needs MinIO) |
+| `mise run infra:up` | Start MinIO + Postgres + Iceberg REST + seed fixtures |
+| `mise run infra:down` | Stop local stack |
+| `mise run catalog:apply --env local --layer … --domain … --table …` | Apply Iceberg DDL |
+| `mise run catalog:drop --env local --layer … --domain … --table …` | Drop Iceberg table |
+| `mise run sample:ingest` | Run `sample.orders_ingest` (needs catalog:apply) |
+| `mise run sample` | Run `sample.orders_summary` |
 | `mise run spark-app -- ...` | Run any Spark app |
 | `mise run clean-cache` | Remove pytest/ruff/`__pycache__` caches |
