@@ -24,3 +24,4 @@ packages = ["spark_app"]
 
 [tool.ruff]
 line-length = 120
+exclude = ["notebooks/*.ipynb"]

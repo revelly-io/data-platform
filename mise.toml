@@ -21,6 +21,26 @@ description = "Run a Spark app via entrypoint"
 raw_args = true
 run = "uv run python -m spark_app.entrypoint"
 
+[tasks."catalog:apply"]
+description = "Apply Iceberg DDL from catalog/ddl/"
+raw_args = true
+run = "uv run python -m spark_app.catalog.apply"
+
+[tasks."catalog:drop"]
+description = "Drop Iceberg table (catalog/ddl target)"
+raw_args = true
+run = "uv run python -m spark_app.catalog.apply --drop"
+
+[tasks."sample:ingest"]
+description = "Run sample.orders_ingest (requires infra:up + catalog:apply)"
+run = """
+uv run python -m spark_app.entrypoint \
+  --app_name sample.orders_ingest \
+  --env local \
+  --ymd $(date +%Y-%m-%d) \
+  --hms $(date +%H%M%S)
+"""
+
 [tasks."infra:up"]
 description = "Start local MinIO stack (docker compose)"
 run = "docker compose -f docker/compose.yml --env-file .env.local up -d"

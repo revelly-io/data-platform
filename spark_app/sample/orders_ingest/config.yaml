@@ -1,0 +1,15 @@
+spark:
+  configs:
+    spark.sql.shuffle.partitions: "1"
+
+datasets:
+  input:
+    orders_seed:
+      type: path
+      path: raw/sample/orders/orders.parquet
+      format: parquet
+  output:
+    orders:
+      type: table
+      table: refined.sample.orders
+      mode: append
