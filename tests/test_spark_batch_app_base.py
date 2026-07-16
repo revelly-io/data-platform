@@ -6,7 +6,7 @@ def test_execute_runs_lifecycle(test_app):
 
     with (
         patch.object(test_app, "_build_spark", return_value=mock_spark),
-        patch("spark_app.common.bases.base.log_app_startup") as log_startup,
+        patch("spark_app.common.bases.batch.log_batch_startup") as log_startup,
         patch.object(test_app, "run") as run,
     ):
         test_app.execute()

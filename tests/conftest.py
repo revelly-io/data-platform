@@ -8,6 +8,8 @@ import yaml
 
 from spark_app.common.app_factory import AppFactory
 from spark_app.common.bases.base import SparkAppBase
+from spark_app.common.bases.batch import SparkBatchAppBase
+from spark_app.common.bases.ops import SparkOpsAppBase
 from spark_app.common.config.loader import ConfigLoader
 from spark_app.common.config.merge import deep_merge
 from spark_app.common.datasets import DatasetContext
@@ -110,11 +112,20 @@ def app_factory_argv() -> list[str]:
 
 @pytest.fixture
 def stub_spark_app_class():
-    class StubSparkApp(SparkAppBase):
+    class StubSparkApp(SparkBatchAppBase):
         def run(self, spark) -> None:
             pass
 
     return StubSparkApp
+
+
+@pytest.fixture
+def stub_spark_ops_app_class():
+    class StubSparkOpsApp(SparkOpsAppBase):
+        def run(self, spark) -> None:
+            pass
+
+    return StubSparkOpsApp
 
 
 @pytest.fixture

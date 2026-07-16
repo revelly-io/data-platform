@@ -8,6 +8,7 @@ from spark_app.common.datasets.models import Dataset
 
 if TYPE_CHECKING:
     from spark_app.common.bases.base import SparkAppBase
+    from spark_app.common.bases.batch import SparkBatchAppBase
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +21,7 @@ def _config_for_log(config: dict) -> dict:
     return {key: value for key, value in config.items() if key != "datasets"}
 
 
-def _serialize_datasets(app: SparkAppBase) -> dict:
+def _serialize_datasets(app: SparkBatchAppBase) -> dict:
     def serialize_group(group: dict[str, Dataset]) -> dict:
         return {name: {"type": ds.type, "location": ds.location, "metadata": ds.metadata} for name, ds in group.items()}
 
@@ -30,17 +31,20 @@ def _serialize_datasets(app: SparkAppBase) -> dict:
     }
 
 
-def log_app_startup(app: SparkAppBase) -> None:
-    if app._input is None or app._output is None:
-        raise RuntimeError("input/output is not available until execute() builds it")
-
+def log_batch_startup(app: SparkBatchAppBase) -> None:
     logger.info(
         "Spark app | [%s] %s (ymd=%s, hms=%s)",
-        app._env,
-        app._app_name,
-        app._ymd,
-        app._hms,
+        app.env,
+        app.app_name,
+        app.ymd,
+        app.hms,
     )
-    logger.info("Extra args | %s", _json(app._extra_args))
-    logger.info("Config | %s", _json(_config_for_log(app._config)))
+    logger.info("Extra args | %s", _json(app.extra_args))
+    logger.info("Config | %s", _json(_config_for_log(app.config)))
     logger.info("Datasets | %s", _json(_serialize_datasets(app)))
+
+
+def log_ops_startup(app: SparkAppBase) -> None:
+    logger.info("Spark app | [%s] %s", app.env, app.app_name)
+    logger.info("Extra args | %s", _json(app.extra_args))
+    logger.info("Config | %s", _json(_config_for_log(app.config)))

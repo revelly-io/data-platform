@@ -1,10 +1,10 @@
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
 
-from spark_app.common.bases.base import SparkAppBase
+from spark_app.common.bases.batch import SparkBatchAppBase
 
 
-class OrdersSummaryApp(SparkAppBase):
+class OrdersSummaryApp(SparkBatchAppBase):
     """Read sample orders parquet from MinIO, aggregate by status, and show."""
 
     def run(self, spark: SparkSession) -> None:

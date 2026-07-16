@@ -1,9 +1,9 @@
 from pyspark.sql import SparkSession
 
-from spark_app.common.bases.base import SparkAppBase
+from spark_app.common.bases.batch import SparkBatchAppBase
 
 
-class OrdersIngestApp(SparkAppBase):
+class OrdersIngestApp(SparkBatchAppBase):
     """Read raw seed parquet from MinIO and append to refined Iceberg table."""
 
     def run(self, spark: SparkSession) -> None:
