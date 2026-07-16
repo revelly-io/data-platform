@@ -17,7 +17,7 @@ Each app is a Python package under `spark_app/` with exactly two required files:
 
 ```
 spark_app/
-└── sample/hello_world/
+└── sample/orders_summary/
     ├── app.py        # exactly one SparkAppBase subclass
     └── config.yaml   # app-specific config (merged on top of global)
 ```
@@ -26,7 +26,7 @@ Run by dotted package name:
 
 ```bash
 mise run spark-app \
-  --app_name sample.hello_world \
+  --app_name sample.orders_summary \
   --env local \
   --ymd 2026-07-01 \
   --hms 120000
@@ -60,7 +60,7 @@ sequenceDiagram
 
 | Step | When |
 |------|------|
-| Config merge | `AppFactory.build()` — once per run |
+| Config load + merge | `AppFactory.build()` — `.env.{env}`, yaml merge, `${VAR}` expand |
 | Dataset resolve | `SparkAppBase.execute()` — after SparkSession exists |
 | Startup logging | After datasets are resolved (includes final locations) |
 
@@ -69,7 +69,7 @@ sequenceDiagram
 | Class | Module | Role |
 |-------|--------|------|
 | **AppFactory** | `common/app_factory.py` | **Factory** — parse CLI, validate app layout, dynamically load app class, call `ConfigLoader.load()` |
-| **ConfigLoader** | `common/config/loader.py` | Load global + app YAML and `deep_merge` (app wins at leaf keys) |
+| **ConfigLoader** | `common/config/loader.py` | Load `.env.{env}`, merge global + app YAML, expand `${VAR}` via `string.Template` |
 | **SparkAppBase** | `common/bases/base.py` | **Template Method** — fixed lifecycle: spark → datasets → log → `run()` → stop |
 | **DatasetContext** | `common/datasets/context.py` | One instance per yaml group (`input` or `output`): holds resolved `Dataset` objects, exposes `read`/`write`, supports `("env")` for cross-env |
 | **Dataset** | `common/datasets/models.py` | **Strategy** — yaml spec → location via `from_spec()`; actual IO in `read()` / `write()` |
@@ -80,33 +80,31 @@ Supporting modules: `config/merge.py`, `bases/logging.py`, `datasets/registry.py
 
 ## Config
 
-Two layers merged by `--env`:
-
 ```
-spark_app/config/{local|sandbox}/global-config.yaml
-  + spark_app/{app_name}/config.yaml
+.env.{env}  +  spark_app/config/{env}/global-config.yaml  +  spark_app/{app_name}/config.yaml
   → deep merge (app overrides global at leaf keys)
+  → ${VAR} substitution from os.environ (via .env.{env})
 ```
 
-Global config holds infra defaults (`catalog`, `datasets.warehouse`, `spark.master`). App config overrides specific keys (e.g. shuffle partitions) and declares `datasets.input` / `datasets.output` specs.
+`--env` selects the config directory and dotenv file. Global: `catalog`, `datasets.warehouse`, `spark.*`. App: `datasets.input` / `output`. Secrets stay in `.env.{env}` — see `.env.{env}.example`.
 
-`SparkAppBase._build_spark()` applies merged `spark.master` and `spark.configs` to the SparkSession builder.
+`SparkAppBase._build_spark()` applies merged `spark.master` and `spark.configs`.
 
 ### Startup log (merged + resolved)
 
-After merge and dataset resolve, `log_app_startup()` prints four lines. Example for `sample.hello_world` with `--env local --ymd 2026-07-01 --hms 120000`:
+After merge and dataset resolve, `log_app_startup()` prints four lines. Example for `sample.orders_summary` with `--env local`:
 
 ```
-INFO Spark app | [local] sample.hello_world (ymd=2026-07-01, hms=120000)
+INFO Spark app | [local] sample.orders_summary (ymd=2026-07-16, hms=162753)
 INFO Extra args | {}
-INFO Config | {"catalog": {"name": "iceberg"}, "spark": {"master": "local[*]", "configs": {"spark.sql.shuffle.partitions": "1"}}}
-INFO Datasets | {"input": {"orders": {"type": "table", "location": "iceberg.raw.orders", "metadata": {}}, "impression": {"type": "table", "location": "s3a://localhost:9000/warehouse/landing/impression/ymd=2026-07-01", "metadata": {"format": "parquet", "catalog": "iceberg"}}}, "output": {"main": {"type": "path", "location": "s3a://localhost:9000/warehouse/mart/hello_world/ymd=2026-07-01", "metadata": {"format": "parquet", "mode": "overwrite"}}}}
+INFO Config | {"catalog": {"name": "iceberg"}, "spark": {"master": "local[*]", "configs": {"spark.sql.shuffle.partitions": "1", "spark.hadoop.fs.s3a.endpoint": "http://localhost:9000", ...}}}
+INFO Datasets | {"input": {"orders": {"type": "path", "location": "s3a://local/raw/fixtures/orders/orders.parquet", "metadata": {"format": "parquet"}}}, "output": {}}
 ```
 
 What this shows:
 
-- **Config line** — merged infra without the `datasets` section. Note `spark.sql.shuffle.partitions` is `"1"` (app override), not `"4"` from global.
-- **Datasets line** — fully resolved locations: catalog prefix on tables, `{ymd}` substituted, relative paths joined with `warehouse` from global config.
+- **Config line** — merged infra without the `datasets` section. Resolved secrets appear as plain values (not `${...}`). App overrides global leaf keys (e.g. `spark.sql.shuffle.partitions: "1"`).
+- **Datasets line** — fully resolved locations: `{warehouse}/{path}`, `{ymd}` substituted where used.
 
 The `datasets` block is omitted from the Config line because it is logged separately once resolved.
 
@@ -116,7 +114,7 @@ The `datasets` block is omitted from the Config line because it is logged separa
 
 Under `datasets` in merged config:
 
-- `warehouse` — base storage path, **set in global config** (`datasets.warehouse`). Relative paths in app specs are resolved as `{warehouse}/{path}`.
+- `warehouse` — base storage URI (`s3a://{env}`). **Bucket name matches `--env`** (`local`, `homelab`, `aws`). App paths are resolved as `{warehouse}/{path}`.
 - `input` / `output` — named dataset specs (declared in app config).
 
 Each spec requires an explicit `type` field (`path` or `table`). Types are not inferred from YAML keys.
@@ -129,15 +127,13 @@ In `run()`, use `self.input` and `self.output` — each is a `DatasetContext` fo
 
 ```python
 orders = self.input.read("orders")
-self.output.write("main", orders)
 
 # Cross-env (reloads config for that env on first use)
-self.input("sandbox").read("orders")
-self.output("sandbox").write("main", orders)
+self.input("homelab").read("orders")
 ```
 
 - **`read` / `write`** on the context look up a named `Dataset` and delegate IO to it.
-- **`self.input["orders"]`** returns the resolved `Dataset` (e.g. for `.location`).
+- **`self.input["orders"]`** returns the resolved `Dataset` (e.g. for `.read(spark)` or `.location`).
 
 ### How DatasetContext is built
 
@@ -163,7 +159,28 @@ yaml spec → registry (type → class) → Dataset.from_spec() → dict[name, D
 | `path` | `PathDataset` | File paths under `warehouse`; generic format/options IO in base `Dataset` |
 | `table` | `TableDataset` | Catalog table or path-based table (`by_path`) |
 
-One `PathDataset` handles all URI schemes (local, s3, hdfs) — no split by filesystem.
+One `PathDataset` handles all URI schemes (s3a, file, hdfs) — storage backend is determined by `warehouse` and spark configs, not by dataset type.
+
+### Storage layout
+
+Paths are **the same across envs**; isolation is by bucket (`--env`) and credentials (`.env.{env}`).
+
+```
+s3a://{env}/
+  raw/{database}/{table}/[partition=...]/
+  refined/{database}/{table}/[partition=...]/
+  mart/{database}/{table}/[partition=...]/
+```
+
+- **raw** — source-aligned ingest (files or external table locations).
+- **refined** — cleaned, conformed datasets.
+- **mart** — app- or domain-facing aggregates.
+
+Use `{ymd}`, `{hms}`, `{env}` templates in yaml paths for partitions (e.g. `raw/events/orders/ymd={ymd}/`).
+
+Catalog tables are **external**: metadata in the catalog (Iceberg/Hive), data files under the paths above. Dropping a table removes metadata only; object storage data remains unless explicitly deleted.
+
+`type: table` specs use catalog namespaces aligned with the layer (`raw.orders`, `mart.orders_summary`). `type: path` specs set the relative path under `warehouse` directly.
 
 ### Adding a dataset type
 
@@ -182,21 +199,14 @@ Apps subclass `SparkAppBase` and implement only `run(self, spark)`.
 | `self._config` | Merged config dict |
 | `self._extra_args` | CLI key-value pairs after required args |
 
-## Tooling: mise + uv
-
-| Tool | Why |
-|------|-----|
-| **mise** | Pin Python version, run project tasks, auto-activate venv on `cd` |
-| **uv** | Fast dependency install/sync, consistent `uv run` execution |
-
-```bash
-mise run setup    # install Python + uv sync
-mise run test     # pytest
-mise run sample   # smoke-run hello_world
-```
+Setup, local infra, and mise tasks: root [README](../README.md).
 
 ## Testing
 
-Fixture-based smoke tests in `tests/` (no real infra): `ConfigLoader`, `DatasetContext`, `AppFactory`, `SparkAppBase`.
+`tests/` contains **framework smoke tests only** — mock-based, no Docker/MinIO/Spark cluster required.
+
+Coverage: `ConfigLoader` (merge + env substitution), `DatasetContext`, `AppFactory`, `SparkAppBase`.
+
+Integration / E2E tests against real infra are not included yet.
 
 Run: `mise run test`
