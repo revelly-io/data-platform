@@ -1,4 +1,17 @@
+from unittest.mock import MagicMock
+
 import pytest
+
+
+def test_read_delegates_to_dataset(merged_config, make_dataset_context, spark):
+    ctx = make_dataset_context(merged_config)
+    frame = MagicMock()
+    spark.table.return_value = frame
+
+    result = ctx.input.read("orders")
+
+    assert result is frame
+    spark.table.assert_called_once_with("iceberg.raw.orders")
 
 
 def test_resolves_path_and_table_datasets(merged_config, make_dataset_context, test_ymd):
@@ -8,7 +21,7 @@ def test_resolves_path_and_table_datasets(merged_config, make_dataset_context, t
     assert ctx.input["orders"].location == "iceberg.raw.orders"
 
     assert ctx.output["main"].type == "path"
-    assert ctx.output["main"].location == f"s3a://localhost:9000/warehouse/mart/test_app/ymd={test_ymd}"
+    assert ctx.output["main"].location == f"s3a://local/mart/test_app/summary/ymd={test_ymd}"
     assert ctx.output["main"].metadata == {"format": "parquet", "mode": "overwrite"}
 
 
@@ -16,7 +29,7 @@ def test_table_with_path_location(merged_config, make_dataset_context, test_ymd)
     ctx = make_dataset_context(merged_config)
 
     assert ctx.input["impression"].type == "table"
-    assert ctx.input["impression"].location == f"s3a://localhost:9000/warehouse/landing/impression/ymd={test_ymd}"
+    assert ctx.input["impression"].location == f"s3a://local/raw/events/impression/ymd={test_ymd}"
     assert ctx.input["impression"].metadata == {"format": "parquet", "catalog": "iceberg"}
 
 

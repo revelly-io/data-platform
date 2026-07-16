@@ -54,7 +54,7 @@ def spark() -> MagicMock:
 def global_config() -> dict:
     return {
         "catalog": {"name": "iceberg"},
-        "datasets": {"warehouse": "s3a://localhost:9000/warehouse"},
+        "datasets": {"warehouse": "s3a://local"},
         "spark": {
             "master": "local[*]",
             "configs": {"spark.sql.shuffle.partitions": "4"},
@@ -71,14 +71,14 @@ def app_config() -> dict:
                 "orders": {"type": "table", "table": "raw.orders"},
                 "impression": {
                     "type": "table",
-                    "path": "landing/impression/ymd={ymd}",
+                    "path": "raw/events/impression/ymd={ymd}",
                     "format": "parquet",
                 },
             },
             "output": {
                 "main": {
                     "type": "path",
-                    "path": "mart/test_app/ymd={ymd}",
+                    "path": "mart/test_app/summary/ymd={ymd}",
                     "format": "parquet",
                     "mode": "overwrite",
                 },
@@ -141,7 +141,9 @@ def config_loader_root(tmp_path, global_config: dict, app_config: dict, monkeypa
     (app_dir / "app.py").write_text("# stub app module for layout validation\n")
 
     monkeypatch.setattr(ConfigLoader, "SPARK_APP_ROOT", tmp_path)
+    monkeypatch.setattr(ConfigLoader, "REPO_ROOT", tmp_path)
     monkeypatch.setattr(ConfigLoader, "GLOBAL_CONFIG_ROOT", tmp_path / "config")
+    (tmp_path / f".env.{TEST_ENV}").write_text("# test env\n", encoding="utf-8")
     return tmp_path
 
 

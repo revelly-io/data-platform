@@ -68,7 +68,7 @@ class DatasetContext:
         ctx.write("main", df)
 
     Another env:
-        ctx("sandbox").read("orders")
+        ctx("homelab").read("orders")
     """
 
     INPUT: DatasetKind = "input"
