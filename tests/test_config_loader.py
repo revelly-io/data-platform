@@ -3,6 +3,32 @@ import pytest
 from spark_app.common.config.loader import ConfigLoader
 
 
+def test_load_global_returns_global_config(config_loader_root, global_config, test_env):
+    config = ConfigLoader.load_global(test_env)
+
+    assert config == global_config
+
+
+def test_load_global_resolves_env_placeholders(config_loader_root, test_env, monkeypatch):
+    monkeypatch.setenv("S3A_ACCESS_KEY", "from-env")
+    global_path = config_loader_root / "config" / test_env / ConfigLoader.GLOBAL_CONFIG_FILE
+    global_path.write_text(
+        "spark:\n  configs:\n    spark.hadoop.fs.s3a.access.key: ${S3A_ACCESS_KEY}\n",
+        encoding="utf-8",
+    )
+
+    config = ConfigLoader.load_global(test_env)
+
+    assert config["spark"]["configs"]["spark.hadoop.fs.s3a.access.key"] == "from-env"
+
+
+def test_load_global_missing_env_file_raises(config_loader_root, test_env):
+    (config_loader_root / f".env.{test_env}").unlink()
+
+    with pytest.raises(FileNotFoundError, match=r"Missing .*/\.env\.local"):
+        ConfigLoader.load_global(test_env)
+
+
 def test_load_merges_global_and_app_config(config_loader_root, merged_config, test_app_name, test_env):
     config = ConfigLoader.load(test_app_name, env=test_env)
 

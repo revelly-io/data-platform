@@ -1,11 +1,8 @@
-import os
 from pathlib import Path
-from string import Template
-from typing import Any
 
 from dotenv import load_dotenv
 
-from spark_app.common.config.merge import deep_merge, load_yaml
+from spark_app.common.config.merge import deep_merge, expand_env, load_yaml
 
 
 class ConfigLoader:
@@ -19,8 +16,13 @@ class ConfigLoader:
     GLOBAL_CONFIG_FILE = "global-config.yaml"
 
     @classmethod
-    def load(cls, app_name: str, env: str) -> dict:
-        """Merge global-config for env with the app's config.yaml (app wins)."""
+    def load_global(cls, env: str) -> dict:
+        """Load the .env.{env} file and this env's global-config.yaml, ${VAR}-expanded.
+
+        Self-contained (safe to call directly, e.g. from notebooks) — expansion only
+        substitutes from os.environ, so expanding here vs. after merging with an app
+        overlay produces the same result either way.
+        """
         env_file = cls.REPO_ROOT / f".env.{env}"
         if not env_file.is_file():
             raise FileNotFoundError(f"Missing {env_file} (copy .env.{env}.example → .env.{env})")
@@ -32,34 +34,22 @@ class ConfigLoader:
                 f"Missing required file: {global_config_path} (each env must provide {cls.GLOBAL_CONFIG_FILE})"
             )
 
+        return expand_env(load_yaml(global_config_path))
+
+    @classmethod
+    def load(cls, app_name: str, env: str) -> dict:
+        """Merge global-config for env with the app's config.yaml (app wins)."""
+        global_config = cls.load_global(env)
+
         app_config_path = cls.app_dir(app_name) / cls.CONFIG_FILE
         if not app_config_path.is_file():
             raise FileNotFoundError(
                 f"Missing required file: {app_config_path} (each app must provide {cls.CONFIG_FILE})"
             )
 
-        merged = deep_merge(load_yaml(global_config_path), load_yaml(app_config_path))
-        return _expand_env(merged)
+        return deep_merge(global_config, expand_env(load_yaml(app_config_path)))
 
     @classmethod
     def app_dir(cls, app_name: str) -> Path:
         """Resolve a dotted app name (e.g. 'sample.orders_summary') to its package dir."""
         return cls.SPARK_APP_ROOT / Path(*app_name.split("."))
-
-
-def _expand_env(config: dict[str, Any]) -> dict[str, Any]:
-    def walk(node: Any) -> Any:
-        if isinstance(node, dict):
-            return {key: walk(value) for key, value in node.items()}
-        if isinstance(node, str) and "$" in node:
-            return _expand_string(node)
-        return node
-
-    return walk(config)
-
-
-def _expand_string(value: str) -> str:
-    try:
-        return Template(value).substitute(os.environ)
-    except KeyError as exc:
-        raise ValueError(f"Missing environment variable: {exc.args[0]}") from None
