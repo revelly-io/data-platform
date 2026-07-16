@@ -1,0 +1,9 @@
+catalog:
+  name: iceberg
+
+datasets:
+  warehouse: "s3a://aws"
+
+spark:
+  configs:
+    spark.sql.shuffle.partitions: "200"

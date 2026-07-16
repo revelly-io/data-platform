@@ -1,0 +1,10 @@
+catalog:
+  name: iceberg
+
+datasets:
+  warehouse: "s3a://homelab"
+
+spark:
+  master: "k8s://https://kubernetes.default.svc"
+  configs:
+    spark.sql.shuffle.partitions: "8"

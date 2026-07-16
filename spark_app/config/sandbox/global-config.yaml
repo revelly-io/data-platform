@@ -1,7 +1,0 @@
-datasets:
-  warehouse: "s3a://sandbox-bucket/warehouse"
-
-spark:
-  master: "local[*]"
-  configs:
-    spark.sql.shuffle.partitions: "8"

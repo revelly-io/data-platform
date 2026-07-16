@@ -54,7 +54,7 @@ class AppFactory:
     def _parse_args(self, argv: list[str] | None):
         parser = argparse.ArgumentParser()
         parser.add_argument("--app_name", required=True)
-        parser.add_argument("--env", required=True, choices=["local", "sandbox"])
+        parser.add_argument("--env", required=True, choices=["local", "homelab", "aws"])
         parser.add_argument("--ymd", required=True, type=_parse_ymd)
         parser.add_argument("--hms", required=True, type=_parse_hms)
 
