@@ -25,7 +25,9 @@ def test_build_batch_app_missing_ymd_hms_raises(
         factory.build()
 
 
-def test_build_ops_app_without_ymd_hms(config_loader_root, stub_spark_ops_app_class, monkeypatch, test_app_name, test_env):
+def test_build_ops_app_without_ymd_hms(
+    config_loader_root, stub_spark_ops_app_class, monkeypatch, test_app_name, test_env
+):
     monkeypatch.setattr(AppFactory, "_load_app_class", lambda self, app_name: stub_spark_ops_app_class)
     factory = AppFactory(["--app_name", test_app_name, "--env", test_env, "--layer", "refined"])
 

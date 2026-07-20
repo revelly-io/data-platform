@@ -72,6 +72,5 @@ class TableDataset(Dataset):
             writer.overwritePartitions()
         else:
             raise ValueError(
-                f"dataset '{self.name}' unsupported table write mode {mode!r} "
-                "(supported: append, overwrite_partitions)"
+                f"dataset '{self.name}' unsupported table write mode {mode!r} (supported: append, overwrite_partitions)"
             )
